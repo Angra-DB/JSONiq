@@ -21,8 +21,8 @@ literal -> booleanLiteral : {bool, '$1'}.
 literal -> nullLiteral : {null, '$1'}.
 
 object -> '{' pairs '}' : {object, '$2'}.
-object -> '{' '}' : {object, {}}.
-pairs -> pairItem : add_if_not_empty('$1', []).
+object -> '{' '}' : {object, []}.
+pairs -> pairItem : ['$1'].
 pairs -> pairItem ',' pairs : ['$1' | '$3'].
 pairItem -> expr ':' expr : {mk_pair, ['$1', '$3']}.
 pairItem -> expr '?' ':' expr : {force_not_null, ['$1', '$4']}.
@@ -50,10 +50,12 @@ expr -> expr 'and' expr : {'and', ['$1', '$3']}.
 expr -> expr 'or' expr : {'or', ['$1', '$3']}.
 expr -> 'not' expr : {'not', ['$2']}.
 expr -> expr '.' expr : {selector, ['$1', '$3']}.
-expr -> expr '[''[' expr ']'']' : {indexer, ['$1', '$3']}.
+expr -> expr '[''[' expr ']'']' : {indexer, ['$1', '$4']}.
+expr -> expr '[' expr ']' : {predicate, ['$1', '$3']}.
 expr -> literal : '$1'.
 expr -> object : '$1'.
 expr -> array : '$1'.
+expr -> 'it' : element(1, '$1').
 
 item -> expr : '$1'.
 

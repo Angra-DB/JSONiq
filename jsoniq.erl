@@ -1,6 +1,21 @@
 -module(jsoniq).
 -compile(export_all).
 
+run_query(File) ->
+    {ok, String} = file:read_file(File),
+    case lex:string(binary_to_list(String)) of
+        {ok, Tokens, _} -> 
+            case parser:parse(Tokens) of
+                {ok, ParsingTree} ->
+                    % io:format("Parsing Tree: ~p~n", [ParsingTree]),
+                    execute(ParsingTree);
+                Err ->
+                    Err
+            end;
+        Err ->
+            Err
+    end.
+
 execute(T = {Type, _}) when Type =:= numeric; Type =:= bool; Type =:= string; Type =:= null ->
     T;
 
@@ -8,14 +23,14 @@ execute({array, ExpL}) ->
     {array, lists:map(fun(X) -> execute(X) end, ExpL)};
 
 execute({object, ExpL}) ->
-    {object, list_to_tuple(lists:filtermap(fun(X) -> 
-            case V = execute(X) =:= {} of
+    {object, lists:filtermap(fun(X) -> 
+            case (V = execute(X)) =:= {} of
                 false ->
                     {true, V};
                 _ ->
                     false         
             end 
-        end, ExpL))};
+        end, ExpL)};
 
 execute({mk_pair, [KExp, VExp]}) ->
     {K, V} = {execute(KExp), execute(VExp)},
@@ -31,65 +46,86 @@ execute({force_not_null, [KExp, VExp]}) ->
             make_pair(K, V)
     end;
 
+execute({concat, Args}) ->
+    {string, execute_op(Args, [string, string], fun(A, B) -> A ++ B end)};
+
+execute({add, Args}) ->
+    {numeric, execute_op(Args, [numeric, numeric], fun(A, B) -> A + B end)};
+
+execute({sub, Args}) ->
+    {numeric, execute_op(Args, [numeric, numeric], fun(A, B) -> A - B end)};
+
+execute({mult, Args}) ->
+    {numeric, execute_op(Args, [numeric, numeric], fun(A, B) -> A * B end)};
+
+execute({idiv, Args}) ->
+    {numeric, execute_op(Args, [numeric, numeric], fun(A, B) -> A div B end)};
+
+execute({mod, Args}) ->
+    {numeric, execute_op(Args, [numeric, numeric], fun(A, B) -> A rem B end)};
+
+execute({eq, Args}) ->
+    {bool, execute_op(Args, [[numeric, string, null], [numeric, string, null]], fun(A, B) -> A =:= B end)};
+
+execute({ne, Args}) ->
+    {bool, execute_op(Args, [any, any], fun(A, B) -> A =/= B end)};
+    
+execute({le, Args}) ->
+    {bool, execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun le/2)};
+    
+execute({lt, Args}) ->
+    {bool, execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun lt/2)};
+
+execute({ge, Args}) ->
+    {bool, execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun ge/2)};
+    
+execute({gt, Args}) ->
+    {bool, execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun gt/2)};
+
+execute({'and', Args}) ->
+    {bool, execute_op(Args, [bool, bool], fun(A, B) -> A and B end)};
+    
+execute({'or', Args}) ->
+    {bool, execute_op(Args, [bool, bool], fun(A, B) -> A or B end)};
+
+execute({'not', [Expr]}) ->
+    ExprValue = execute(Expr),
+    case ExprValue of
+        {bool, Value} ->
+            {bool, not Value};
+        false ->
+            invalid_argument    
+    end;
+
 execute({gen_seq, Args}) ->
     ExprValues = [A, B] = execute_args(Args),
     case type_guard(ExprValues, [numeric, numeric]) of
         true ->
-            {array, lists:seq(A, B)};
+            {array, lists:map(fun(X) -> {numeric, X} end, lists:seq(get_value(A), get_value(B)))};
         false ->
             invalid_arguments
     end;
 
-execute({concat, Args}) ->
-    execute_op(Args, [string, string], fun(A, B) -> A ++ B end);
-
-execute({add, Args}) ->
-    execute_op(Args, [numeric, numeric], fun(A, B) -> A + B end);
-
-execute({sub, Args}) ->
-    execute_op(Args, [numeric, numeric], fun(A, B) -> A - B end);
-
-execute({mult, Args}) ->
-    execute_op(Args, [numeric, numeric], fun(A, B) -> A * B end);
-
-execute({idiv, Args}) ->
-    execute_op(Args, [numeric, numeric], fun(A, B) -> A div B end);
-
-execute({mod, Args}) ->
-    execute_op(Args, [numeric, numeric], fun(A, B) -> A rem B end);
-
-execute({eq, Args}) ->
-    execute_op(Args, [[numeric, string, null], [numeric, string, null]], fun(A, B) -> A =:= B end);
-
-execute({ne, Args}) ->
-    execute_op(Args, [any, any], fun(A, B) -> A =/= B end);
-    
-execute({le, Args}) ->
-    execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun le/2);
-    
-execute({lt, Args}) ->
-    execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun lt/2);
-
-execute({ge, Args}) ->
-    execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun ge/2);
-    
-execute({gt, Args}) ->
-    execute_op(Args, [[numeric, null, string], [numeric, null, string]], fun gt/2);
-
-execute({'and', Args}) ->
-    execute_op(Args, [bool, bool], fun(A, B) -> A and B end);
-    
-execute({'or', Args}) ->
-    execute_op(Args, [bool, bool], fun(A, B) -> A or B end);
-
-execute({'not', [Expr]}) ->
-    ExprValue = execute(Expr),
-    case is_of_type({ExprValue, bool}) of
+execute({indexer, Args}) ->
+    ExprValues = [Array, Index] = execute_args(Args),
+    case type_guard(ExprValues, [array, numeric]) of
         true ->
-            not ExprValue;
+            access_array(get_value(Array), get_value(Index));
         false ->
-            invalid_argument    
-    end.
+            invalid_arguments    
+    end;
+
+execute({selector, Args}) ->
+    ExprValues = [Obj, Selector] = execute_args(Args),
+    case type_guard(ExprValues, [[object, array], string]) of
+        true ->
+            access_field(Obj, Selector);
+        false ->
+            invalid_arguments    
+    end;
+
+execute({predicate, [ArrayExpr, PredExpr]}) ->
+    execute({array, lists:filter(fun(V) -> execute_pred(V, PredExpr) end, get_value(ArrayExpr))}).
 
 % Misc
 
@@ -109,20 +145,6 @@ make_pair(K, V) ->
             {K, V};
         _ ->
             invalid_key
-    end.
-
-is_comparable({_}) ->
-    true;
-
-is_comparable(V) -> 
-    is_integer(V) orelse (V =:= null) orelse V orelse not V.
-
-compare(A, B, Fun) ->
-    case is_comparable(A) and is_comparable(B) of
-        true ->
-            Fun(A, B);
-        _ ->
-            not_atomic
     end.
 
 le(null, _) ->
@@ -153,20 +175,14 @@ gt(_, null) ->
 gt(A, B) ->
     A > B.
 
-access_field(ObjList, {Selector}) when is_list(Selector), is_list(ObjList) ->
-    lists:map(fun(Obj) -> access_field(Obj, {Selector}) end, ObjList);
+access_field({array, ObjList}, Selector) ->
+    io:format("List ~p~nSelector ~p~n", [ObjList, Selector]),
+    lists:map(fun(Obj) -> access_field(Obj, Selector) end, ObjList);
 
-access_field(Obj, {Selector}) when is_list(Selector) -> 
-    Proplist = 
-        case Obj of
-            {T} when is_list(T) ->
-                not_object;
-            _ ->
-                tuple_to_list(Obj)
-        end,
-    proplists:get_value(Selector, Proplist, null).
+access_field({object, Obj}, Selector) -> 
+    proplists:get_value(Selector, Obj, null).
 
-access_array(Array, Index) when is_list(Array), is_integer(Index) ->
+access_array(Array, Index) ->
     lists:nth(Index+1, Array).
 
 % Evaluates if the type of Value is equal to the Type element of the tuple
@@ -193,9 +209,31 @@ execute_op(Exprs, Types, OP) ->
     ExprValues = [A, B] = execute_args(Exprs),
     case type_guard(ExprValues, Types) of
         true ->
-            {Type, ValueA} = A,
-            {Type, ValueB} = B,
-            {Type, OP(ValueA, ValueB)};
+            OP(get_value(A), get_value(B));
         false ->
             invalid_arguments
     end.
+
+get_value({Type, V}) when Type =:= numeric; Type =:= bool; Type =:= string; Type =:= null; Type =:= array; Type =:= object ->
+    V.
+
+get_type({Type, _}) ->
+    Type.
+
+execute_pred(V, PredExpr) ->
+    PredResult = execute(replace_context(V, PredExpr)),
+    case is_of_type({PredResult, bool}) of
+        true ->
+            get_value(PredResult);
+        _ ->
+            invalid_predicate
+    end.
+
+replace_context(V, it) ->
+    V;
+
+replace_context(_, {Type, Value}) when Type =:= numeric; Type =:= bool; Type =:= string; Type =:= null ->
+    {Type, Value};
+
+replace_context(V, {Type, Args}) ->
+    {Type, lists:map(fun(X) -> replace_context(V, X) end, Args)}.
