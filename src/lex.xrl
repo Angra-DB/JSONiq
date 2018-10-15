@@ -10,7 +10,7 @@ Separators = [\:\,\{\}\[\]\?\|\)\(\.\;\=]
 
 Logic = and|or|not
 
-Keyword = for|in|collection|where|return|let
+Keyword = for|in|collection|where|return|let|if|then|else
 
 Variable = \$[a-zA-Z_$][a-zA-Z_$0-9]*
 

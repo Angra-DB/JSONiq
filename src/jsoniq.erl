@@ -8,6 +8,7 @@ run_query_from_file(File, AdbSock) ->
 run_query(Query, AdbSock) ->
     case parse(Query) of
         {ok, ParsingTree} ->
+            lager:info("Parsing Tree = ~p", [ParsingTree]),
             format_json(execute(ParsingTree, AdbSock, []));
         Err ->
             Err
@@ -34,6 +35,16 @@ execute({variable, Var}, _, Context) ->
 
 execute({let_clause, [Var, Attr, RestExpr]}, AdbSock, Context) ->
     execute(RestExpr, AdbSock, bind_variable(Var, execute(Attr, AdbSock, Context), Context));
+
+execute({if_clause, [ConditionExpr, ThenExpr, ElseExpr]}, AdbSock, Context) ->
+    case execute(ConditionExpr, AdbSock, Context) of
+        {bool, true} ->
+            execute(ThenExpr, AdbSock, Context);
+        {bool, false} ->
+            execute(ElseExpr, AdbSock, Context);
+        _ ->
+            invalid_condition_expression
+    end;
 
 execute({array, ExpL}, AdbSock, Context) ->
     {array, lists:map(fun(X) -> execute(X, AdbSock, Context) end, ExpL)};
@@ -152,8 +163,11 @@ execute({selector, Args}, AdbSock, Context) ->
 
 execute({predicate, [ArrayExpr, PredExpr]}, AdbSock, Context) ->
     {array, Array} = execute(ArrayExpr, AdbSock, Context),
-    execute({array, lists:filter(fun(V) -> execute_pred(V, PredExpr, AdbSock, Context) end, Array)}, AdbSock, Context).
+    execute({array, lists:filter(fun(V) -> execute_pred(V, PredExpr, AdbSock, Context) end, Array)}, AdbSock, Context);
 
+execute(T, _, _) ->
+    lager:info("Invalid Parsing Tree Node ~p", [T]),
+    invalid_parse.
 % Misc
 
 idiv_numbers(N1, N2) when is_integer(N1), is_integer(N2) ->

@@ -1,1 +1,22 @@
-let $gender = "Male"; for $x in collection("Teste") where ($x."gender") eq $gender return {"name": $x."first_name", "Email": $x."email"}
+let $females = for $x in collection("Teste") where ($x."gender") eq "Female" return $x; if (($females[(it."id") eq 2])[[0]]."name") ne "Fanni" then "It is Fanni" else "It is not Fanni"
+
+let $me = {"name": "Fernando", "surname": "Nunes"}; $me."name" eq "Fernando"
+
+let $me = {"name": "Flabio", "surname": "Low"};"Fernando" eq $me."name" and $me."surname" eq "Nunes" or $me."name" eq "Flabio"
+
+{eq,
+    [
+        {
+            let_clause,[
+                {variable,'$me'},
+                {object,[{mk_pair,[{string,"name"},{string,"Fernando"}]},{mk_pair,[{string,"surname"},{string,"Nunes"}]}]},
+                {string,"Fernando"}]
+            },
+            {selector,[{variable,'$me'},{string,"name"}]}]}
+
+{eq,
+    [
+        {selector,[{let_clause,[{variable,'$me'},{object,[{mk_pair,[{string,"name"},{string,"Fernando"}]},{mk_pair,[{string,"surname"},{string,"Nunes"}]}]},{variable,'$me'}]},{string,"name"}]}
+        {string,"Fernando"}]}
+
+{let_clause,[{variable,'$me'},{object,[{mk_pair,[{string,"name"},{string,"Fernando"}]},{mk_pair,[{string,"surname"},{string,"Nunes"}]}]},{eq,[{eq,[{eq,[{string,"Fernando"},{and,[{selector,[{variable,'$me'},{string,"name"}]},{selector,[{variable,'$me'},{string,"surname"}]}]}]},{or,[{string,"Nunes"},{selector,[{variable,'$me'},{string,"name"}]}]}]},{string,"Flabio"}]}]}

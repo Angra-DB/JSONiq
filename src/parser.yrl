@@ -3,12 +3,23 @@ Header "%% Copyright (C)"
 "%% @Author John".
 
 Nonterminals item literal numericLiteral stringLiteral booleanLiteral nullLiteral integerLiteral object pairs pairItem array arrayItem expr variableExpr
-    flowr whereClause returnClause collectionClause.
+    flowr whereClause returnClause collectionClause letClause.
 
-Terminals variable string digits boolean null ':' ',' '{' '}' '[' ']' '||' '+' '-' '*' 'mod' 'idiv' 'to' '?' '|' 'eq' 'ne' 'lt' 'le' 'gt' 'ge' 'and' 'or' 'not' '.'
-    '(' ')' 'it' 'where' 'for' 'in' 'collection' 'return' 'let' '=' ';'.
+Terminals variable string digits boolean null ':' ',' '{' '}' '[' ']' '||' '+' '-' '*' 'mod' 'idiv' 'to' '?' 'eq' 'ne' 'lt' 'le' 'gt' 'ge' 'and' 'or' 'not' '.'
+    '(' ')' 'it' 'where' 'for' 'in' 'collection' 'return' 'let' '=' ';' 'if' 'then' 'else'.
 
 Rootsymbol item.
+
+
+Left 100 ';'.
+Left 200 '+' '-'.
+Left 300 '*' 'idiv' 'mod'.
+Left 400 'or'.
+Left 430 'and'.
+Left 460 'not'.
+Left 500 'eq' 'ne' 'le' 'lt' 'ge' 'gt'.
+Left 600 '.'.
+Right 700 '='.
 
 integerLiteral -> digits : value_of('$1').
 booleanLiteral -> boolean : value_of('$1').
@@ -63,8 +74,10 @@ expr -> object : '$1'.
 expr -> array : '$1'.
 expr -> 'it' : element(1, '$1').
 expr -> flowr : '$1'.
-expr -> 'let' variableExpr '=' expr ';' expr : {let_clause, ['$2', '$4', '$6']}.
+expr -> letClause ';' expr : add_expr('$1', '$3').
+expr -> 'if' expr 'then' expr 'else' expr : {if_clause, ['$2', '$4', '$6']}.
 
+letClause -> 'let' variableExpr '=' expr : {let_clause, ['$2', '$4']}.
 flowr -> 'for' variableExpr 'in' collectionClause whereClause returnClause : {flowr, ['$2', '$4', '$5', '$6']}.
 whereClause -> 'where' expr : {where, '$2'}.
 returnClause -> 'return' expr : {return, '$2'}.
@@ -75,3 +88,6 @@ Erlang code.
 
 value_of(Token) ->
     element(3, Token).
+
+add_expr({let_clause, Args}, Expr) ->
+    {let_clause, Args++[Expr]}.
