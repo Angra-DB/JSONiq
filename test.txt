@@ -1,0 +1,1 @@
+let $gender = "Male"; for $x in collection("Teste") where ($x."gender") eq $gender return {"name": $x."first_name", "Email": $x."email"}

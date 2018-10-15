@@ -6,9 +6,13 @@ Arithmetic = \+|\-|\*|idiv|mod
 
 Comparison = le|lt|ne|eq|gt|ge
 
-Separators = [\:\,\{\}\[\]\?\|\)\(\.]
+Separators = [\:\,\{\}\[\]\?\|\)\(\.\;\=]
 
 Logic = and|or|not
+
+Keyword = for|in|collection|where|return|let
+
+Variable = \$[a-zA-Z_$][a-zA-Z_$0-9]*
 
 Rules.
 
@@ -45,5 +49,11 @@ it :
 
 {Separators} :
   {token,{list_to_atom(TokenChars), TokenLine}}.
+
+{Keyword} :
+  {token,{list_to_atom(TokenChars), TokenLine}}.
+
+{Variable} :
+  {token,{variable, TokenLine, list_to_atom(TokenChars)}}.
 
 Erlang code.

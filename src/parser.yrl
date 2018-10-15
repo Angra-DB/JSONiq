@@ -2,10 +2,11 @@ Header "%% Copyright (C)"
 "%% @private"
 "%% @Author John".
 
-Nonterminals item literal numericLiteral stringLiteral booleanLiteral nullLiteral integerLiteral object pairs pairItem array arrayItem expr.
+Nonterminals item literal numericLiteral stringLiteral booleanLiteral nullLiteral integerLiteral object pairs pairItem array arrayItem expr variableExpr
+    flowr whereClause returnClause collectionClause.
 
-Terminals string digits boolean null ':' ',' '{' '}' '[' ']' '||' '+' '-' '*' 'mod' 'idiv' 'to' '?' '|' 'eq' 'ne' 'lt' 'le' 'gt' 'ge' 'and' 'or' 'not' '.'
-    '(' ')' 'it'.
+Terminals variable string digits boolean null ':' ',' '{' '}' '[' ']' '||' '+' '-' '*' 'mod' 'idiv' 'to' '?' '|' 'eq' 'ne' 'lt' 'le' 'gt' 'ge' 'and' 'or' 'not' '.'
+    '(' ')' 'it' 'where' 'for' 'in' 'collection' 'return' 'let' '=' ';'.
 
 Rootsymbol item.
 
@@ -33,6 +34,11 @@ array -> '[' expr 'to' expr ']' : {gen_seq, ['$2', '$4']}.
 arrayItem -> expr : ['$1'].
 arrayItem -> expr ',' arrayItem : ['$1' | '$3'].
 
+collectionClause -> 'collection' '(' stringLiteral ')' : {collection,  '$3'}.
+
+variableExpr -> variable : {variable, value_of('$1')}.
+
+expr -> variableExpr : '$1'.
 expr -> '(' expr ')' : '$2'.
 expr -> expr '||' expr : {concat, ['$1', '$3']}.
 expr -> expr '+' expr : {add, ['$1', '$3']}.
@@ -56,6 +62,12 @@ expr -> literal : '$1'.
 expr -> object : '$1'.
 expr -> array : '$1'.
 expr -> 'it' : element(1, '$1').
+expr -> flowr : '$1'.
+expr -> 'let' variableExpr '=' expr ';' expr : {let_clause, ['$2', '$4', '$6']}.
+
+flowr -> 'for' variableExpr 'in' collectionClause whereClause returnClause : {flowr, ['$2', '$4', '$5', '$6']}.
+whereClause -> 'where' expr : {where, '$2'}.
+returnClause -> 'return' expr : {return, '$2'}.
 
 item -> expr : '$1'.
 
