@@ -20,3 +20,6 @@ let $me = {"name": "Flabio", "surname": "Low"};"Fernando" eq $me."name" and $me.
         {string,"Fernando"}]}
 
 {let_clause,[{variable,'$me'},{object,[{mk_pair,[{string,"name"},{string,"Fernando"}]},{mk_pair,[{string,"surname"},{string,"Nunes"}]}]},{eq,[{eq,[{eq,[{string,"Fernando"},{and,[{selector,[{variable,'$me'},{string,"name"}]},{selector,[{variable,'$me'},{string,"surname"}]}]}]},{or,[{string,"Nunes"},{selector,[{variable,'$me'},{string,"name"}]}]}]},{string,"Flabio"}]}]}
+
+
+*((for $x in collection("Teste") where ($x."gender") eq "Female" return $x)[[0]])

@@ -73,12 +73,27 @@ execute({force_not_null, [KExp, VExp]}, AdbSock, Context) ->
             make_pair(K, V)
     end;
 
+execute({db_object, [Obj, K ={object_key, _}]}, AdbSock, Context) ->
+    {db_object, [execute(Obj, AdbSock, Context), K]};
+
+execute({get_key, Expr}, AdbSock, Context) ->
+    case execute(Expr, AdbSock, Context) of
+        {db_object, [_, K]} ->
+            K;
+        {object, _} ->
+            {null, null};
+        _ ->
+            not_a_object
+    end;
+
+
 execute({flowr, [Var, Collection, WhereClause, {return, ReturnExpr}]}, AdbSock, Context) ->
-    {ok, Jsons} = filter_collection(Var, WhereClause, Collection, AdbSock, Context),
+    {Keys, {ok, Jsons}} = filter_collection(Var, WhereClause, Collection, AdbSock, Context),
     ObjList = format_string("[~s]", [string:join(Jsons, ",")]),
     case parse(ObjList) of
         {ok, {array, Objs}} ->
-            {array, lists:map(fun (X) -> execute(ReturnExpr, AdbSock, bind_variable(Var, execute(X, AdbSock, Context), Context)) end, Objs)};
+            WithKeys = lists:zip(Objs, Keys),
+            {array, lists:map(fun ({O, K}) -> execute(ReturnExpr, AdbSock, bind_variable(Var, execute({db_object, [O, {object_key, K}]}, AdbSock, Context), Context)) end, WithKeys)};
         _ ->
             invalid_collection
     end;
@@ -154,7 +169,7 @@ execute({indexer, Args}, AdbSock, Context) ->
 
 execute({selector, Args}, AdbSock, Context) ->
     ExprValues = [Obj, Selector] = execute_args(Args, AdbSock, Context),
-    case type_guard(ExprValues, [[object, array], string]) of
+    case type_guard(ExprValues, [[object, array, db_object], string]) of
         true ->
             access_field(Obj, Selector);
         false ->
@@ -216,6 +231,9 @@ gt(_, null) ->
 gt(A, B) ->
     A > B.
 
+access_field({db_object, [Obj, _]}, Selector) ->
+    access_field(Obj, Selector);
+
 access_field({array, ObjList}, Selector) ->
     io:format("List ~p~nSelector ~p~n", [ObjList, Selector]),
     {array, lists:map(fun(Obj) -> access_field(Obj, Selector) end, ObjList)};
@@ -257,7 +275,10 @@ execute_op(Exprs, Types, OP, AdbSock, Context) ->
     end.
 
 get_value({Type, V}) when Type =:= numeric; Type =:= bool; Type =:= string; Type =:= null; Type =:= array; Type =:= object ->
-    V.
+    V;
+
+get_value({db_object, [Obj, _]}) ->
+    get_value(Obj).
 
 get_type({Type, _}) ->
     Type.
@@ -281,14 +302,13 @@ replace_context(V, {Type, Args}, Var) ->
     {Type, lists:map(fun(X) -> replace_context(V, X, Var) end, Args)}.
 
 filter_collection(Variable, {where, WhereClause}, {collection, CollectionName}, AdbSock, Context) ->
-    lager:info("starting filtering of collection"),
     send_command(AdbSock, format_string("connect ~s", [CollectionName])),
     AngraQuery = traverse_where_clause(Variable, WhereClause, AdbSock, Context),
-    lager:info("querying database: ~p", [AngraQuery]),
     QueryResult = parse_erlang_term(send_command(AdbSock, format_string("query ~s", [AngraQuery]))),
-    lager:info("query result: ~p", [QueryResult]),
     DocumentKeys = lists:map(fun(X) -> element(2, X) end, QueryResult),
-    parse_erlang_term(send_command(AdbSock, format_string("bulk_lookup ~s", [string:join(DocumentKeys, " ")]))).
+    Documents = parse_erlang_term(send_command(AdbSock, format_string("bulk_lookup ~s", [string:join(DocumentKeys, " ")]))),
+    {DocumentKeys, Documents}.
+
 
 traverse_where_clause(Variable, {BoolOp, [Lhs, Rhs]}, AdbSock, Context) when BoolOp =:= 'or'; BoolOp =:= 'and' ->
     LhsExpr = traverse_where_clause(Variable, Lhs, AdbSock, Context),
@@ -345,6 +365,9 @@ format_json({array, List}) ->
 
 format_json({object, PropList}) ->
     list_to_tuple(lists:map(fun ({pair, {Name, Value}}) -> {format_json(Name), format_json(Value)} end, PropList));
+
+format_json({db_object, [Obj, _]}) ->
+    format_json(Obj);
 
 format_json({_, V}) ->
     V.
