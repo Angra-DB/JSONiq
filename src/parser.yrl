@@ -3,10 +3,10 @@ Header "%% Copyright (C)"
 "%% @Author John".
 
 Nonterminals item literal numericLiteral stringLiteral booleanLiteral nullLiteral integerLiteral object pairs pairItem array arrayItem expr variableExpr
-    flowr whereClause returnClause collectionClause letClause getKey.
+    flowr whereClause returnClause collectionClause letClause keyExpr.
 
 Terminals variable string digits boolean null ':' ',' '{' '}' '[' ']' '||' '+' '-' '*' 'mod' 'idiv' 'to' '?' 'eq' 'ne' 'lt' 'le' 'gt' 'ge' 'and' 'or' 'not' '.'
-    '(' ')' 'it' 'where' 'for' 'in' 'collection' 'return' 'let' '=' ';' 'if' 'then' 'else'.
+    '(' ')' 'it' 'where' 'for' 'in' 'collection' 'return' 'let' '=' ';' 'if' 'then' 'else' 'save'.
 
 Rootsymbol item.
 
@@ -18,7 +18,7 @@ Left 400 'or'.
 Left 430 'and'.
 Left 460 'not'.
 Left 500 'eq' 'ne' 'le' 'lt' 'ge' 'gt'.
-Unary 550 getKey.
+Unary 550 keyExpr.
 Left 600 '.'.
 Right 700 '='.
 
@@ -77,12 +77,13 @@ expr -> 'it' : element(1, '$1').
 expr -> flowr : '$1'.
 expr -> letClause ';' expr : add_expr('$1', '$3').
 expr -> 'if' expr 'then' expr 'else' expr : {if_clause, ['$2', '$4', '$6']}.
-expr -> getKey : '$1'.
+expr -> keyExpr : '$1'.
+expr -> 'save' '(' expr ',' expr ')' : {save, ['$3', '$5']}.
+    
 
-
-getKey -> '*' expr : {get_key, '$2'}.
+keyExpr -> '*' expr : {get_key, '$2'}.
 letClause -> 'let' variableExpr '=' expr : {let_clause, ['$2', '$4']}.
-flowr -> 'for' variableExpr 'in' collectionClause whereClause returnClause : {flowr, ['$2', '$4', '$5', '$6']}.
+flowr -> 'for' variableExpr 'in' collectionClause whereClause returnClause : {flowr, ['$2', '$4', '$5', '$6']}. 
 whereClause -> 'where' expr : {where, '$2'}.
 returnClause -> 'return' expr : {return, '$2'}.
 

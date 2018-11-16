@@ -95,7 +95,7 @@ connect() ->
             throw(could_not_connect_to_the_server)
     end.
 
-preprocess(RawData) ->
+preprocess(RawData) -> 
     _reverse = lists:reverse(RawData),
     Pred = fun(C) -> (C == $\n) or (C == $\r) end,
     lists:reverse(lists:dropwhile(Pred, _reverse)).

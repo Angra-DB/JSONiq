@@ -97,6 +97,7 @@ execute({flowr, [Var, Collection, WhereClause, {return, ReturnExpr}]}, AdbSock, 
         _ ->
             invalid_collection
     end;
+    
 
 execute({concat, Args}, AdbSock, Context) ->
     {string, execute_op(Args, [string, string], fun(A, B) -> A ++ B end, AdbSock, Context)};
@@ -243,7 +244,12 @@ access_field({object, Obj}, Selector) ->
     proplists:get_value(Selector, PropList, {null, null}).
 
 access_array(Array, Index) ->
-    lists:nth(Index+1, Array).
+    case Index+1 > length(Array) of
+        true ->
+            invalid_index;
+        _ ->
+            lists:nth(Index+1, Array)
+    end.
 
 % Evaluates if the type of Value is equal to the Type element of the tuple
 is_of_type(Arg) -> 
@@ -370,7 +376,10 @@ format_json({db_object, [Obj, _]}) ->
     format_json(Obj);
 
 format_json({_, V}) ->
-    V.
+    V;
+
+format_json(Error) ->
+    Error.
 
 format_string(Format, Args) ->
     lists:flatten(io_lib:format(Format, Args)).
@@ -379,11 +388,31 @@ send_command(Socket, Command) ->
     gen_tcp:send(Socket, Command),
     case gen_tcp:recv(Socket, 0, 500) of
         {ok, Packet} -> 
-            binary_to_list(Packet);
+            L = binary_to_list(Packet),
+            {Size, Rest} = split(L),
+            read_result(Size, Rest, Socket);
         {error, Reason} -> 
             throw(Reason)
     end.
 
+read_result(Size, Data, Socket) ->
+    case Size > length(Data) of
+        true ->
+            case gen_tcp:recv(Socket, 0, 500) of
+                {ok, Packet} -> 
+                    read_result(Size, Data++binary_to_list(Packet), Socket);
+                {error, Reason} -> 
+                    throw(Reason)
+            end;
+        _ ->
+            Data
+    end.
+
+split(Str) ->
+    Stripped = string:strip(Str),
+    Pred = fun(A) -> A =/= $  end,
+    {Size, Args} = lists:splitwith(Pred, Stripped),
+    {list_to_integer(Size), string:strip(Args)}.
 
 parse_erlang_term(ErlString) ->
     {ok,Tokens,_} = erl_scan:string(ErlString++"."),
