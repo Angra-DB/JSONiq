@@ -330,7 +330,7 @@ traverse_where_clause(Variable, {eq, [Lhs, Rhs]}, AdbSock, Context) ->
         {FieldNames, normal_expr} ->
             {execute(Rhs, AdbSock, Context), FieldNames}
     end,
-    format_string("filter_field ~s/filter ~s/", [Selectors, FilterString]).
+    format_string("filter ~s/filter_field ~s/", [FilterString, Selectors]).
 
 % This function should return the list of field selectors if the operand is accessing a for context variable or normal_expr otherwise
 get_field_selectors(Variable, {selector, [Variable, Expr]}, AdbSock, Context) ->
@@ -385,6 +385,7 @@ format_string(Format, Args) ->
     lists:flatten(io_lib:format(Format, Args)).
 
 send_command(Socket, Command) ->
+    lager:info("Sending command ~s", [Command]),
     gen_tcp:send(Socket, Command),
     case gen_tcp:recv(Socket, 0, 500) of
         {ok, Packet} -> 
