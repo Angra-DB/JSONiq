@@ -3,7 +3,7 @@ Header "%% Copyright (C)"
 "%% @Author John".
 
 Nonterminals item literal numericLiteral stringLiteral booleanLiteral nullLiteral integerLiteral object pairs pairItem array arrayItem expr variableExpr
-    flowr whereClause returnClause collectionClause letClause keyExpr.
+    flowr whereClause returnClause collectionClause letClause keyExpr intervalClause.
 
 Terminals variable string digits boolean null ':' ',' '{' '}' '[' ']' '||' '+' '-' '*' 'mod' 'idiv' 'to' '?' 'eq' 'ne' 'lt' 'le' 'gt' 'ge' 'and' 'or' 'not' '.'
     '(' ')' 'it' 'where' 'for' 'in' 'collection' 'return' 'let' '=' ';' 'if' 'then' 'else' 'save'.
@@ -84,8 +84,10 @@ expr -> 'save' '(' expr ',' expr ')' : {save, ['$3', '$5']}.
 keyExpr -> '*' expr : {get_key, '$2'}.
 letClause -> 'let' variableExpr '=' expr : {let_clause, ['$2', '$4']}.
 flowr -> 'for' variableExpr 'in' collectionClause whereClause returnClause : {flowr, ['$2', '$4', '$5', '$6']}. 
+flowr -> 'for' variableExpr 'in' collectionClause intervalClause whereClause returnClause : {flowr, ['$2', '$4', '$5', '$6', '$7']}. 
 whereClause -> 'where' expr : {where, '$2'}.
 returnClause -> 'return' expr : {return, '$2'}.
+intervalClause -> '[' expr ',' expr ']' : {interval, {'$2', '$4'}}.
 
 item -> expr : '$1'.
 

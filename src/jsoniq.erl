@@ -86,14 +86,25 @@ execute({get_key, Expr}, AdbSock, Context) ->
             not_a_object
     end;
 
-
-execute({flowr, [Var, Collection, WhereClause, {return, ReturnExpr}]}, AdbSock, Context) ->
-    {Keys, {ok, Jsons}} = filter_collection(Var, WhereClause, Collection, AdbSock, Context),
+execute({flowr, [Var, Collection, IntervalClause, WhereClause, {return, ReturnExpr}]}, AdbSock, Context) ->
+    {Keys, Jsons} = filter_collection(Var, WhereClause, IntervalClause, Collection, AdbSock, Context),
     ObjList = format_string("[~s]", [string:join(Jsons, ",")]),
     case parse(ObjList) of
         {ok, {array, Objs}} ->
             WithKeys = lists:zip(Objs, Keys),
             {array, lists:map(fun ({O, K}) -> execute(ReturnExpr, AdbSock, bind_variable(Var, execute({db_object, [O, {object_key, K}]}, AdbSock, Context), Context)) end, WithKeys)};
+        _ ->
+            invalid_collection
+    end;
+
+
+execute({flowr, [Var, Collection, WhereClause, {return, ReturnExpr}]}, AdbSock, Context) ->
+    {Keys, Jsons} = filter_collection(Var, WhereClause, {interval, {{numeric, 0}, {numeric, 100}}}, Collection, AdbSock, Context),
+    ObjList = format_string("[~s]", [string:join(Jsons, ",")]),
+    case parse(ObjList) of
+        {ok, {array, Objs}} ->
+            WithKeys = lists:zip(Objs, Keys),
+            {array, lists:map(fun ({K, O}) -> execute(ReturnExpr, AdbSock, bind_variable(Var, execute({db_object, [O, {object_key, K}]}, AdbSock, Context), Context)) end, WithKeys)};
         _ ->
             invalid_collection
     end;
@@ -149,6 +160,8 @@ execute({'not', [Expr]}, AdbSock, Context) ->
         false ->
             invalid_argument    
     end;
+
+
 
 execute({gen_seq, Args}, AdbSock, Context) ->
     ExprValues = [A, B] = execute_args(Args, AdbSock, Context),
@@ -307,13 +320,16 @@ replace_context(_, {Type, Value}, _) when Type =:= numeric; Type =:= bool; Type 
 replace_context(V, {Type, Args}, Var) ->
     {Type, lists:map(fun(X) -> replace_context(V, X, Var) end, Args)}.
 
-filter_collection(Variable, {where, WhereClause}, {collection, CollectionName}, AdbSock, Context) ->
+filter_collection(Variable, {where, WhereClause}, {interval, {StartExpr, NElementExpr}}, {collection, CollectionName}, AdbSock, Context) ->
     send_command(AdbSock, format_string("connect ~s", [CollectionName])),
+    {numeric, Start} = execute(StartExpr, AdbSock, Context),
+    {numeric, NElement} = execute(NElementExpr, AdbSock, Context),
     AngraQuery = traverse_where_clause(Variable, WhereClause, AdbSock, Context),
-    QueryResult = parse_erlang_term(send_command(AdbSock, format_string("query ~s", [AngraQuery]))),
+    QueryResult = parse_erlang_term(send_command(AdbSock, format_string("query ~sinterval ~p ~p", [AngraQuery, Start, NElement]))),
     DocumentKeys = lists:map(fun(X) -> element(2, X) end, QueryResult),
-    Documents = parse_erlang_term(send_command(AdbSock, format_string("bulk_lookup ~s", [string:join(DocumentKeys, " ")]))),
-    {DocumentKeys, Documents}.
+    BulkKeys = string:join(DocumentKeys, " "),
+    {ok, Result} = parse_erlang_term(send_command(AdbSock, format_string("bulk_lookup ~p ~s", [length(BulkKeys), BulkKeys]))),
+    lists:unzip(Result).
 
 
 traverse_where_clause(Variable, {BoolOp, [Lhs, Rhs]}, AdbSock, Context) when BoolOp =:= 'or'; BoolOp =:= 'and' ->
@@ -387,7 +403,7 @@ format_string(Format, Args) ->
 send_command(Socket, Command) ->
     lager:info("Sending command ~s", [Command]),
     gen_tcp:send(Socket, Command),
-    case gen_tcp:recv(Socket, 0, 500) of
+    case gen_tcp:recv(Socket, 0, infinity) of
         {ok, Packet} -> 
             L = binary_to_list(Packet),
             {Size, Rest} = split(L),
@@ -397,9 +413,9 @@ send_command(Socket, Command) ->
     end.
 
 read_result(Size, Data, Socket) ->
-    case Size > length(Data) of
+    case Size > length(Data)+1 of
         true ->
-            case gen_tcp:recv(Socket, 0, 500) of
+            case gen_tcp:recv(Socket, 0, infinity) of
                 {ok, Packet} -> 
                     read_result(Size, Data++binary_to_list(Packet), Socket);
                 {error, Reason} -> 

@@ -67,7 +67,8 @@ handle_cast(stop, State) ->
 
 handle_info({tcp, Socket, RawData}, State = #state{adb_socket = AdbSock}) ->
     Result = jsoniq:run_query(preprocess(RawData), AdbSock),
-    gen_tcp:send(Socket, io_lib:fwrite("~p~n", [Result])),
+    Flatten = lists:flatten(io_lib:fwrite("~p~n", [Result])),
+    gen_tcp:send(Socket, io_lib:fwrite("~p ~s", [length(Flatten), Flatten])),
     {noreply, State};
 
 handle_info({tcp_closed, _Socket}, State) ->
